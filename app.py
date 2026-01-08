@@ -7,10 +7,8 @@ import json
 import io
 from datetime import datetime
 
-
 # --- 頁面基本設定 ---
-st.set_page_config(page_title="AI 名片掃描器", page_icon="📇")
-# st.write("目前讀到的 Secrets:", st.secrets)
+st.set_page_config(page_title="貝拉的名片夾", page_icon="📇")
 
 # --- 1. 定義 Gemini AI 功能 ---
 def get_gemini_response(image_bytes):
@@ -18,10 +16,10 @@ def get_gemini_response(image_bytes):
         # 從 Secrets 讀取 API Key
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
         
-        # 使用 Gemini 1.5 Flash (速度快、免費額度高)
+        # 使用最新的 Gemini 2.5 Flash
         model = genai.GenerativeModel(
             model_name="models/gemini-2.5-flash",
-            generation_config={"response_mime_type": "application/json"} # 強制回傳 JSON
+            generation_config={"response_mime_type": "application/json"}
         )
 
         prompt = """
@@ -48,7 +46,6 @@ def get_gemini_response(image_bytes):
 
     except Exception as e:
         error_msg = str(e)
-        # 捕捉免費額度用完的錯誤 (HTTP 429)
         if "429" in error_msg or "ResourceExhausted" in error_msg:
             return "QUOTA_EXCEEDED"
         else:
@@ -59,22 +56,18 @@ def get_gemini_response(image_bytes):
 def save_to_google_sheets(data, note):
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        # 從 Secrets 讀取服務帳號設定
         creds_dict = dict(st.secrets["gcp_service_account"])
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
         
-        # 開啟試算表
         sheet_url = st.secrets["SHEET_URL"]
         sheet = client.open_by_url(sheet_url).sheet1
         
-        # 計算項次
         existing_data = sheet.get_all_values()
         next_index = len(existing_data) if len(existing_data) > 0 else 1
         
         upload_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # 準備寫入的資料列
         row = [
             next_index,
             data.get('chinese_name', ''),
@@ -95,41 +88,47 @@ def save_to_google_sheets(data, note):
         st.error(f"資料庫連線失敗: {e}")
         return False
 
-# --- 3. 建置網頁介面 ---
-st.title("📇 AI 名片掃描器")
-st.caption("Powered by Gemini 1.5 Flash")
+# --- 3. 建置網頁介面 (貝拉專屬版) ---
+st.title("📇 貝拉的名片夾")
 
-col1, col2 = st.columns([1, 1])
+# 顯示提示訊息
+st.info("💡 提示：請將手機**橫向**持握以拍攝橫式名片。若鏡頭方向錯誤，請按相機預覽右上角的翻轉圖示。")
 
-with col1:
-    st.info("步驟 1：拍攝或上傳")
-    picture = st.camera_input("拍攝名片")
-    # 如果想支援上傳圖片，可自行解開下行註解
-    uploaded_file = st.file_uploader("或上傳圖片", type=['jpg', 'png']) 
+# --- 步驟 1：拍照 ---
+st.subheader("步驟 1：拍攝名片")
+picture = st.camera_input("點擊下方按鈕拍照", label_visibility="collapsed")
+
+# --- 步驟 2：備註 ---
+st.subheader("步驟 2：輸入備註")
+user_note = st.text_input("輸入備註 (例如：展場認識、客戶興趣)", placeholder="選填...")
+
+# --- 步驟 3：送出按鈕 (控制邏輯) ---
+st.write("---") # 分隔線
+# 這裡使用了 full_width=True 讓按鈕在手機上更好按
+if st.button("🚀 送出辨識並存檔", type="primary", use_container_width=True):
     
-    st.info("步驟 2：新增備註")
-    user_note = st.text_input("輸入備註", placeholder="例：展覽認識的客戶...")
-
-with col2:
-    st.info("步驟 3：AI 處理")
-    if picture:
-        if st.button("🚀 開始辨識並存檔", type="primary"):
-            with st.spinner("AI 正在讀取名片..."):
-                image_bytes = picture.getvalue()
-                
-                # 1. 呼叫 AI
-                result = get_gemini_response(image_bytes)
-                
-                # 2. 判斷結果
-                if result == "QUOTA_EXCEEDED":
-                    st.error("⚠️ 免費版額度已用完 (HTTP 429)，請稍後再試！")
-                elif result:
-                    st.success("辨識成功！")
-                    st.json(result) # 顯示結果供核對
-                    
-                    # 3. 存入表格
-                    if save_to_google_sheets(result, user_note):
-                        st.balloons()
-                        st.success("✅ 資料已成功寫入 Google Sheets")
-    else:
-        st.warning("請先在左側拍攝照片")
+    # 檢查有沒有拍照
+    if not picture:
+        st.warning("⚠️ 請先在步驟 1 拍攝名片照片！")
+        st.stop() # 停止執行
+        
+    with st.spinner("AI 正在讀取名片..."):
+        image_bytes = picture.getvalue()
+        
+        # 1. 呼叫 AI
+        result = get_gemini_response(image_bytes)
+        
+        # 2. 判斷結果
+        if result == "QUOTA_EXCEEDED":
+            st.error("⚠️ 免費版額度已用完，請稍後再試！")
+        elif result:
+            st.success("辨識成功！")
+            
+            # 顯示結果預覽 (使用 expander 收合起來，讓畫面乾淨點)
+            with st.expander("查看辨識結果詳情"):
+                st.json(result)
+            
+            # 3. 存入表格
+            if save_to_google_sheets(result, user_note):
+                st.balloons() # 放氣球慶祝
+                st.success("✅ 資料已成功寫入 Google Sheets")
