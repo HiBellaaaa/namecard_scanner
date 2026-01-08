@@ -92,11 +92,26 @@ def save_to_google_sheets(data, note):
 st.title("📇 貝拉的名片夾")
 
 # 顯示提示訊息
-st.info("💡 提示：請將手機**橫向**持握以拍攝橫式名片。若鏡頭方向錯誤，請按相機預覽右上角的翻轉圖示。")
+st.info("💡 提示：使用「拍照」時請將手機橫向持握。若需翻轉鏡頭請按預覽畫面右上角圖示。")
 
-# --- 步驟 1：拍照 ---
-st.subheader("步驟 1：拍攝名片")
-picture = st.camera_input("點擊下方按鈕拍照", label_visibility="collapsed")
+# --- 步驟 1：選擇輸入方式 ---
+st.subheader("步驟 1：取得名片影像")
+
+# 建立選擇按鈕 (Radio Button)
+input_method = st.radio("選擇輸入方式", ["📸 拍照", "📂 上傳圖片"], horizontal=True)
+
+final_image = None  # 用來存放最終要處理的圖片
+
+if input_method == "📸 拍照":
+    camera_file = st.camera_input("點擊下方按鈕拍照", label_visibility="collapsed")
+    if camera_file:
+        final_image = camera_file
+
+else: # 如果選的是上傳圖片
+    upload_file = st.file_uploader("請上傳名片圖片", type=['jpg', 'jpeg', 'png'])
+    if upload_file:
+        st.image(upload_file, caption="預覽上傳圖片", width=300)
+        final_image = upload_file
 
 # --- 步驟 2：備註 ---
 st.subheader("步驟 2：輸入備註")
@@ -104,16 +119,18 @@ user_note = st.text_input("輸入備註 (例如：展場認識、客戶興趣)",
 
 # --- 步驟 3：送出按鈕 (控制邏輯) ---
 st.write("---") # 分隔線
-# 這裡使用了 full_width=True 讓按鈕在手機上更好按
+
+# 送出按鈕
 if st.button("🚀 送出辨識並存檔", type="primary", use_container_width=True):
     
-    # 檢查有沒有拍照
-    if not picture:
-        st.warning("⚠️ 請先在步驟 1 拍攝名片照片！")
-        st.stop() # 停止執行
+    # 檢查有沒有圖片 (不管來源是拍照還是上傳)
+    if final_image is None:
+        st.warning("⚠️ 請先完成步驟 1 (拍照或上傳圖片)！")
+        st.stop()
         
     with st.spinner("AI 正在讀取名片..."):
-        image_bytes = picture.getvalue()
+        # 取得圖片的 bytes 資料
+        image_bytes = final_image.getvalue()
         
         # 1. 呼叫 AI
         result = get_gemini_response(image_bytes)
@@ -124,11 +141,11 @@ if st.button("🚀 送出辨識並存檔", type="primary", use_container_width=T
         elif result:
             st.success("辨識成功！")
             
-            # 顯示結果預覽 (使用 expander 收合起來，讓畫面乾淨點)
+            # 顯示結果預覽
             with st.expander("查看辨識結果詳情"):
                 st.json(result)
             
             # 3. 存入表格
             if save_to_google_sheets(result, user_note):
-                st.balloons() # 放氣球慶祝
+                st.balloons()
                 st.success("✅ 資料已成功寫入 Google Sheets")
