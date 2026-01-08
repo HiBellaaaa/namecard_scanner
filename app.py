@@ -1,3 +1,9 @@
+# --- 插入這兩行 (偵錯用) ---
+st.write(f"目前 Google 套件版本: {genai.__version__}")
+# ------------------------
+
+st.set_page_config(page_title="AI 名片掃描器", page_icon="📇")
+
 import streamlit as st
 import google.generativeai as genai
 import gspread
@@ -9,6 +15,7 @@ from datetime import datetime
 
 # --- 頁面基本設定 ---
 st.set_page_config(page_title="AI 名片掃描器", page_icon="📇")
+# st.write("目前讀到的 Secrets:", st.secrets)
 
 # --- 1. 定義 Gemini AI 功能 ---
 def get_gemini_response(image_bytes):
