@@ -10,6 +10,18 @@ from datetime import datetime
 # --- 頁面基本設定 ---
 st.set_page_config(page_title="貝拉的名片夾", page_icon="📇")
 
+# --- 初始化 Session State (用於重置畫面) ---
+if 'upload_count' not in st.session_state:
+    st.session_state['upload_count'] = 0
+if 'success_msg' not in st.session_state:
+    st.session_state['success_msg'] = None
+
+# 如果有成功訊息（代表剛重置完），顯示出來並清空狀態
+if st.session_state['success_msg']:
+    st.success(st.session_state['success_msg'])
+    st.balloons()
+    st.session_state['success_msg'] = None
+
 # --- 1. 定義 Gemini AI 功能 ---
 def get_gemini_response(image_bytes):
     try:
@@ -30,6 +42,7 @@ def get_gemini_response(image_bytes):
         需要的欄位：
         - chinese_name (中文姓名)
         - english_name (英文姓名)
+        - company_name (公司名稱)
         - department (部門)
         - title (職位)
         - mobile (手機)
@@ -68,10 +81,12 @@ def save_to_google_sheets(data, note):
         
         upload_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
+        # 更新欄位順序，加入 company_name
         row = [
             next_index,
             data.get('chinese_name', ''),
             data.get('english_name', ''),
+            data.get('company_name', ''), # 新增公司名稱
             data.get('department', ''),
             data.get('title', ''),
             data.get('mobile', ''),
@@ -94,28 +109,34 @@ st.title("📇 貝拉的名片夾")
 # 顯示提示訊息
 st.info("💡 提示：使用「拍照」時請將手機橫向持握。若需翻轉鏡頭請按預覽畫面右上角圖示。")
 
+# 設定動態 Key，當 upload_count 改變時，這些元件會被強制重置
+current_key = str(st.session_state['upload_count'])
+
 # --- 步驟 1：選擇輸入方式 ---
 st.subheader("步驟 1：取得名片影像")
 
-# 建立選擇按鈕 (Radio Button)
-input_method = st.radio("選擇輸入方式", ["📸 拍照", "📂 上傳圖片"], horizontal=True)
+# 加入 key
+input_method = st.radio("選擇輸入方式", ["📸 拍照", "📂 上傳圖片"], horizontal=True, key=f"method_{current_key}")
 
 final_image = None  # 用來存放最終要處理的圖片
 
 if input_method == "📸 拍照":
-    camera_file = st.camera_input("點擊下方按鈕拍照", label_visibility="collapsed")
+    # 加入 key
+    camera_file = st.camera_input("點擊下方按鈕拍照", label_visibility="collapsed", key=f"cam_{current_key}")
     if camera_file:
         final_image = camera_file
 
 else: # 如果選的是上傳圖片
-    upload_file = st.file_uploader("請上傳名片圖片", type=['jpg', 'jpeg', 'png'])
+    # 加入 key
+    upload_file = st.file_uploader("請上傳名片圖片", type=['jpg', 'jpeg', 'png'], key=f"up_{current_key}")
     if upload_file:
         st.image(upload_file, caption="預覽上傳圖片", width=300)
         final_image = upload_file
 
 # --- 步驟 2：備註 ---
 st.subheader("步驟 2：輸入備註")
-user_note = st.text_input("輸入備註 (例如：展場認識、客戶興趣)", placeholder="選填...")
+# 加入 key
+user_note = st.text_input("輸入備註 (例如：展場認識、客戶興趣)", placeholder="選填...", key=f"note_{current_key}")
 
 # --- 步驟 3：送出按鈕 (控制邏輯) ---
 st.write("---") # 分隔線
@@ -147,5 +168,12 @@ if st.button("🚀 送出辨識並存檔", type="primary", use_container_width=T
             
             # 3. 存入表格
             if save_to_google_sheets(result, user_note):
-                st.balloons()
-                st.success("✅ 資料已成功寫入 Google Sheets")
+                # 成功後的操作：
+                # 1. 設定成功訊息到 session_state (因為 rerun 會清空畫面上的 success)
+                st.session_state['success_msg'] = "✅ 資料已成功寫入 Google Sheets，畫面已重置！"
+                
+                # 2. 更新計數器 (這會導致所有綁定 key 的元件換新 ID，進而清空內容)
+                st.session_state['upload_count'] += 1
+                
+                # 3. 重新執行 app，讓畫面更新
+                st.rerun()
