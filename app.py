@@ -7,23 +7,6 @@ import json
 import io
 from datetime import datetime
 
-# --- 偵錯區塊：列出所有可用模型 ---
-try:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    st.write(f"目前套件版本: {genai.__version__}")
-    
-    st.write("正在查詢可用模型...")
-    available_models = []
-    for m in genai.list_models():
-        if 'generateContent' in m.supported_generation_methods:
-            available_models.append(m.name)
-    
-    st.write("您的 API Key 支援以下模型：")
-    st.write(available_models) # 這會印出一個列表
-except Exception as e:
-    st.error(f"查詢模型失敗: {e}")
-# -----------------------------
-
 
 # --- 頁面基本設定 ---
 st.set_page_config(page_title="AI 名片掃描器", page_icon="📇")
@@ -37,7 +20,7 @@ def get_gemini_response(image_bytes):
         
         # 使用 Gemini 1.5 Flash (速度快、免費額度高)
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name="models/gemini-2.5-flash",
             generation_config={"response_mime_type": "application/json"} # 強制回傳 JSON
         )
 
