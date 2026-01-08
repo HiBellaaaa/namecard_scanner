@@ -136,7 +136,7 @@ else: # 如果選的是上傳圖片
 # --- 步驟 2：備註 ---
 st.subheader("步驟 2：輸入備註")
 # 加入 key
-user_note = st.text_input("輸入備註 (例如：展場認識、客戶興趣)", placeholder="選填...", key=f"note_{current_key}")
+user_note = st.text_input("例如：展場認識、客戶興趣", placeholder="選填", key=f"note_{current_key}")
 
 # --- 步驟 3：送出按鈕 (控制邏輯) ---
 st.write("---") # 分隔線
