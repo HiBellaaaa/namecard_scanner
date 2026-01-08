@@ -1,9 +1,3 @@
-# --- 插入這兩行 (偵錯用) ---
-st.write(f"目前 Google 套件版本: {genai.__version__}")
-# ------------------------
-
-st.set_page_config(page_title="AI 名片掃描器", page_icon="📇")
-
 import streamlit as st
 import google.generativeai as genai
 import gspread
@@ -12,6 +6,13 @@ from PIL import Image
 import json
 import io
 from datetime import datetime
+
+# --- 插入這兩行 (偵錯用) ---
+st.write(f"目前 Google 套件版本: {genai.__version__}")
+# ------------------------
+
+st.set_page_config(page_title="AI 名片掃描器", page_icon="📇")
+
 
 # --- 頁面基本設定 ---
 st.set_page_config(page_title="AI 名片掃描器", page_icon="📇")
