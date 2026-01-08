@@ -29,6 +29,7 @@ if st.session_state['success_msg']:
 def get_gemini_response(image_bytes):
     try:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        # 使用最新的 2.5 Flash
         model = genai.GenerativeModel(
             model_name="models/gemini-2.5-flash",
             generation_config={"response_mime_type": "application/json"}
@@ -52,6 +53,7 @@ def get_gemini_response(image_bytes):
         response = model.generate_content([prompt, image])
         return json.loads(response.text)
     except Exception as e:
+        # 回傳錯誤訊息方便偵錯
         if "429" in str(e) or "ResourceExhausted" in str(e):
             return "QUOTA_EXCEEDED"
         return None
@@ -80,10 +82,10 @@ def upload_image_to_drive(image_bytes, file_name):
         
         return file.get('webViewLink')
     except Exception as e:
-        st.error(f"Drive 上傳失敗: {e}")
+        st.error(f"Drive 上傳失敗詳細原因: {e}") # 印出錯誤
         return None
 
-# --- 3. 定義 Google Sheets 寫入功能 (已修改超連結邏輯) ---
+# --- 3. 定義 Google Sheets 寫入功能 ---
 def save_to_google_sheets(data, note, drive_link):
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -96,13 +98,11 @@ def save_to_google_sheets(data, note, drive_link):
         next_index = len(existing_data) if len(existing_data) > 0 else 1
         upload_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # --- 這裡修改了：將網址轉換成 Google Sheet 的超連結公式 ---
+        # 處理超連結公式
         if drive_link and "http" in drive_link:
-            # 格式：=HYPERLINK("網址", "顯示文字")
             final_link = f'=HYPERLINK("{drive_link}", "名片連結")'
         else:
             final_link = "上傳失敗"
-        # -----------------------------------------------------
         
         row = [
             next_index,
@@ -116,20 +116,17 @@ def save_to_google_sheets(data, note, drive_link):
             data.get('address', ''),
             note,
             upload_time,
-            final_link  # 放入轉換好的公式
+            final_link
         ]
         
-        # 這裡改用 append_row 的 value_input_option='USER_ENTERED'
-        # 這樣 Google Sheet 才會把 "=HYPERLINK(...)" 當作公式執行，而不是當作純文字
         sheet.append_row(row, value_input_option='USER_ENTERED')
-        
         return True
     except Exception as e:
-        st.error(f"資料庫連線失敗: {e}")
+        st.error(f"Sheet 寫入失敗詳細原因: {e}") # 印出錯誤
         return False
 
 # --- 4. 建置網頁介面 ---
-st.title("📇 貝拉的名片夾")
+st.title("📇 貝拉的名片夾 (偵錯模式)")
 st.info("💡 提示：使用「拍照」時請將手機橫向持握。")
 
 current_key = st.session_state['upload_key']
@@ -152,26 +149,48 @@ user_note = st.text_input("輸入備註", placeholder="選填...", key=f"note_{c
 
 st.write("---")
 
+# --- 按鈕邏輯 (這裡有埋設檢查點) ---
 if st.button("🚀 送出辨識並存檔", type="primary", use_container_width=True):
     if final_image is None:
         st.warning("⚠️ 請先提供名片照片！")
         st.stop()
         
-    with st.spinner("AI 辨識中 & 圖片上傳中..."):
-        image_bytes = final_image.getvalue()
+    st.write("🔄 1. 程式開始執行...") # 檢查點 1
+    
+    image_bytes = final_image.getvalue()
+    st.write("✅ 圖片讀取成功")
+    
+    # 1. AI 辨識
+    st.write("🔄 2. 正在呼叫 Gemini AI (2.5 Flash)...") # 檢查點 2
+    result = get_gemini_response(image_bytes)
+    
+    if result == "QUOTA_EXCEEDED":
+        st.error("⚠️ 免費額度已用完")
+    elif result:
+        st.write(f"✅ AI 辨識成功，姓名: {result.get('chinese_name')}")
         
-        # 1. AI 辨識
-        result = get_gemini_response(image_bytes)
+        # 2. 上傳到 Google Drive
+        st.write("🔄 3. 正在上傳到 Google Drive...") # 檢查點 3
+        file_name = f"名片_{result.get('chinese_name', '未命名')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
         
-        if result == "QUOTA_EXCEEDED":
-            st.error("⚠️ 免費額度已用完")
-        elif result:
-            # 2. 上傳到 Google Drive
-            file_name = f"名片_{result.get('chinese_name', '未命名')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-            drive_link = upload_image_to_drive(image_bytes, file_name)
+        drive_link = upload_image_to_drive(image_bytes, file_name)
+        
+        if drive_link:
+            st.write(f"✅ Drive 上傳完成")
+        else:
+            st.error("❌ Drive 上傳失敗 (請看上方錯誤訊息)")
+            st.stop() # 失敗就停住
+        
+        # 3. 存入 Google Sheets
+        st.write("🔄 4. 正在寫入 Google Sheets...") # 檢查點 4
+        if save_to_google_sheets(result, user_note, drive_link):
+            st.write("✅ Sheets 寫入完成！")
             
-            # 3. 存入 Google Sheets (包含連結)
-            if save_to_google_sheets(result, user_note, drive_link):
-                st.session_state['success_msg'] = f"✅ 成功！已存檔並上傳圖片：{file_name}"
-                st.session_state['upload_key'] += 1
-                st.rerun()
+            st.session_state['success_msg'] = f"✅ 成功！已存檔並上傳圖片：{file_name}"
+            st.session_state['upload_key'] += 1
+            time.sleep(2)
+            st.rerun()
+        else:
+            st.error("❌ Sheets 寫入失敗 (請看上方錯誤訊息)")
+    else:
+        st.error("❌ AI 辨識失敗 (回傳 None)，可能是 API Key 問題或模型名稱錯誤")
