@@ -7,11 +7,22 @@ import json
 import io
 from datetime import datetime
 
-# --- 插入這兩行 (偵錯用) ---
-st.write(f"目前 Google 套件版本: {genai.__version__}")
-# ------------------------
-
-st.set_page_config(page_title="AI 名片掃描器", page_icon="📇")
+# --- 偵錯區塊：列出所有可用模型 ---
+try:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    st.write(f"目前套件版本: {genai.__version__}")
+    
+    st.write("正在查詢可用模型...")
+    available_models = []
+    for m in genai.list_models():
+        if 'generateContent' in m.supported_generation_methods:
+            available_models.append(m.name)
+    
+    st.write("您的 API Key 支援以下模型：")
+    st.write(available_models) # 這會印出一個列表
+except Exception as e:
+    st.error(f"查詢模型失敗: {e}")
+# -----------------------------
 
 
 # --- 頁面基本設定 ---
