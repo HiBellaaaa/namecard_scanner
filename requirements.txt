@@ -4,4 +4,3 @@ pandas
 gspread
 oauth2client
 Pillow
-google-api-python-client
